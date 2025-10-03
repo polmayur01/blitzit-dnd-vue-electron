@@ -1,4 +1,3 @@
-// dnd-dom.js
 let DndDom = null;
 try {
   DndDom = await import("@dnd-kit/dom");
@@ -6,7 +5,6 @@ try {
   DndDom = null;
 }
 
-/* ---------------- event bus ---------------- */
 function createBus() {
   const map = new Map();
   return {
@@ -31,10 +29,9 @@ function createBus() {
   };
 }
 
-/* ---------------- helpers ---------------- */
 export function computeDropIndex({ container, itemRects, y }) {
   const rect = container.getBoundingClientRect();
-  const pointerY = y - rect.top + container.scrollTop; // container-relative
+  const pointerY = y - rect.top + container.scrollTop;
   if (!itemRects.length) return 0;
   for (let i = 0; i < itemRects.length; i++) {
     const r = itemRects[i];
@@ -54,14 +51,22 @@ export function autoScroll(
   else if (y > rect.bottom - threshold) container.scrollTop += speed;
 }
 
-/* ---------------- core ---------------- */
+function directItems(container, selector, exclude) {
+  return Array.from(container.children).filter(
+    (el) =>
+      el.matches?.(selector) &&
+      el !== exclude &&
+      !el.classList.contains("dnd-origin-collapsed")
+  );
+}
+
 export default function createDnd(options = {}) {
   const opts = {
     z: 10000,
-    itemSelector: "[data-id]", // how to find items inside a droppable
-    collapseSource: true, // collapse source item (height:0)
-    showPlaceholder: true, // insert placeholder into droppable
-    ghost: true, // floating overlay clone
+    itemSelector: "[data-id]",
+    collapseSource: true,
+    showPlaceholder: true,
+    ghost: true,
     placeholderClass: "dnd-placeholder",
     originCollapsedClass: "dnd-origin-collapsed",
     ...options,
@@ -76,8 +81,8 @@ export default function createDnd(options = {}) {
       sourceDroppableId?:string
     } */ (null),
     overId: /** @type null | string */ (null),
-    draggables: new Map(), // id -> { el, data, handle }
-    droppables: new Map(), // id -> { el, data, container, placeholderEl?:HTMLElement, lastIndex?:number }
+    draggables: new Map(),
+    droppables: new Map(),
   };
 
   function within(rect, x, y) {
@@ -98,7 +103,6 @@ export default function createDnd(options = {}) {
     return null;
   }
 
-  /* ---------- overlay ghost ---------- */
   function makeGhost(fromEl, atX, atY) {
     const r = fromEl.getBoundingClientRect();
     const g = fromEl.cloneNode(true);
@@ -111,7 +115,6 @@ export default function createDnd(options = {}) {
     g.style.zIndex = String(opts.z);
     g.style.willChange = "transform";
     g.classList.add("dnd-ghost");
-    document.body.appendChild(g);
     return {
       ghost: g,
       grabX: atX - r.left,
@@ -123,7 +126,6 @@ export default function createDnd(options = {}) {
     ghost.style.transform = `translate3d(${x - grabX}px, ${y - grabY}px, 0)`;
   }
 
-  /* ---------- placeholder management inside droppable ---------- */
   function ensurePlaceholder(droppableId, height) {
     const d = state.droppables.get(droppableId);
     if (!d) return null;
@@ -153,26 +155,20 @@ export default function createDnd(options = {}) {
   function updatePlaceholderPosition(droppableId, index) {
     const d = state.droppables.get(droppableId);
     if (!d || !d.placeholderEl) return;
-    if (d.lastIndex === index && d.placeholderEl.parentElement) return; // no-op
 
     const container = d.container || d.el;
-    const items = Array.from(
-      container.querySelectorAll(opts.itemSelector)
-    ).filter(
-      (el) =>
-        !el.classList.contains(opts.originCollapsedClass) &&
-        el !== d.placeholderEl
-    );
+    const items = directItems(container, opts.itemSelector, d.placeholderEl);
 
-    if (index >= items.length) {
-      container.appendChild(d.placeholderEl);
-    } else {
-      container.insertBefore(d.placeholderEl, items[index]);
-    }
-    d.lastIndex = index;
+    const clamped = Math.max(0, Math.min(index, items.length));
+    if (d.lastIndex === clamped && d.placeholderEl.parentElement) return; 
+
+    const target = clamped >= items.length ? null : items[clamped];
+    if (target) container.insertBefore(d.placeholderEl, target);
+    else container.appendChild(d.placeholderEl);
+
+    d.lastIndex = clamped;
   }
 
-  /* ---------- pointer fallback (works great for Vue/vanilla) ---------- */
   function makePointerDraggable(el, { id, data, handleSelector }) {
     const handle = handleSelector ? el.querySelector(handleSelector) : el;
     if (!handle) return () => {};
@@ -186,7 +182,6 @@ export default function createDnd(options = {}) {
 
       const sourceDroppableId = findSourceDroppableId(el);
 
-      // ghost + collapse source
       let ghostEl,
         grabX = 0,
         grabY = 0,
@@ -199,8 +194,25 @@ export default function createDnd(options = {}) {
         height = g.height || height;
         moveGhost(ghostEl, grabX, grabY, e.clientX, e.clientY);
       }
+
+      if (opts.showPlaceholder && sourceDroppableId) {
+        const d = state.droppables.get(sourceDroppableId);
+        const container = d?.container || d?.el;
+        if (container) {
+          const ph = ensurePlaceholder(sourceDroppableId, height);
+          const items = directItems(container, opts.itemSelector, ph);
+          const sourceIndex = Math.max(
+            0,
+            items.findIndex((n) => n === el)
+          );
+          updatePlaceholderPosition(sourceDroppableId, sourceIndex);
+          state.overId = sourceDroppableId;
+          if (d) d.lastIndex = sourceIndex;
+        }
+      }
+
       if (opts.collapseSource) {
-        el.classList.add(opts.originCollapsedClass); // height:0 via CSS
+        el.classList.add(opts.originCollapsedClass); 
       }
 
       state.active = {
@@ -235,36 +247,29 @@ export default function createDnd(options = {}) {
 
       const overId = findOver(e.clientX, e.clientY);
       if (overId !== state.overId) {
-        // left previous droppable → remove its placeholder
         if (state.overId) removePlaceholder(state.overId);
         state.overId = overId;
         bus.emit("drag:over", { overId, event: e });
       }
 
       if (state.overId) {
-        // auto-scroll
-        const container =
-          state.droppables.get(state.overId)?.container ||
-          state.droppables.get(state.overId)?.el;
+        const d = state.droppables.get(state.overId);
+        const container = d?.container || d?.el;
         if (container) autoScroll(container, { y: e.clientY });
 
-        // compute index & move placeholder
         if (opts.showPlaceholder && container) {
           const ph = ensurePlaceholder(state.overId, a.height);
 
-          // compute item rects in container coords (exclude collapsed origin & placeholder itself)
-          const items = Array.from(
-            container.querySelectorAll(opts.itemSelector)
-          ).filter(
-            (el) =>
-              !el.classList.contains(opts.originCollapsedClass) && el !== ph
-          );
-
-          const itemRects = items.map((node, i) => ({
-            top: node.offsetTop,
-            height: node.offsetHeight,
-            index: i,
-          }));
+          const items = directItems(container, opts.itemSelector, ph);
+          const containerRect = container.getBoundingClientRect();
+          const itemRects = items.map((node, i) => {
+            const r = node.getBoundingClientRect();
+            return {
+              top: r.top - containerRect.top + container.scrollTop,
+              height: r.height,
+              index: i,
+            };
+          });
 
           const index = computeDropIndex({
             container,
@@ -287,19 +292,25 @@ export default function createDnd(options = {}) {
 
     function onUp(e) {
       if (pointerId !== e.pointerId || !state.active) return;
-      handle.releasePointerCapture(pointerId);
+      try {
+        handle.releasePointerCapture(pointerId);
+      } catch {}
       pointerId = null;
 
       const a = state.active;
       const dropTargetId = state.overId;
 
-      // cleanup visuals
+      let dropIndex = null;
+      if (dropTargetId) {
+        const d = state.droppables.get(dropTargetId);
+        dropIndex = d?.lastIndex ?? null;
+      }
+
       a.ghostEl?.remove();
       a.el.classList.remove(opts.originCollapsedClass);
       if (dropTargetId) removePlaceholder(dropTargetId);
       document.body.style.userSelect = "";
 
-      // reset state
       state.active = null;
       state.overId = null;
 
@@ -307,6 +318,7 @@ export default function createDnd(options = {}) {
         id,
         data: a.data,
         dropTargetId,
+        dropIndex,
         x: e.clientX,
         y: e.clientY,
       });
@@ -328,7 +340,6 @@ export default function createDnd(options = {}) {
   function registerDraggable({ id, el, data = {}, handleSelector }) {
     if (!el) return () => {};
     if (DndDom?.createDraggable) {
-      // You can keep this branch if you want the dnd-kit DOM adapter.
       const inst = DndDom.createDraggable(el, {
         id,
         data,
@@ -388,14 +399,3 @@ export default function createDnd(options = {}) {
     _state: state,
   };
 }
-
-/* Add once to your global CSS:
-
-.dnd-origin-collapsed {
-  height:0!important; margin:0!important; padding:0!important;
-  border:0!important; overflow:hidden!important; opacity:0!important;
-  pointer-events:none!important;
-}
-.dnd-ghost { filter: drop-shadow(0 8px 16px rgba(0,0,0,.15)); border-radius:8px; }
-.dnd-placeholder { transition: height .12s ease; }
-*/

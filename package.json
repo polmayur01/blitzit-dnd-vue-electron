@@ -1,7 +1,9 @@
 {
   "name": "blitzit-dnd-vue-electron",
+  "version": "1.0.0",
+  "description": "Blitzit Drag-and-Drop Vue + Electron demo app",
+  "author": "Mayur Pol <polmayuraje@gmail.com>",
   "private": true,
-  "version": "0.0.0",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",

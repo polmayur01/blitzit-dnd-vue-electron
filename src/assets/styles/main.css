@@ -2,17 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-/* App-specific utilities */
-
-/* Scrollbar styling (optional) */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(100, 116, 139, 0.5); /* gray-500/50 */
+  background-color: rgba(100, 116, 139, 0.5);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(100, 116, 139, 0.7);
+}
+
+.dnd-origin-collapsed {
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.dnd-ghost {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.15));
+  border-radius: 8px;
+}
+.dnd-placeholder {
+  transition: height 0.12s ease;
 }

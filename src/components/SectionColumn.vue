@@ -24,7 +24,6 @@ onMounted(async () => {
   })
 
   await nextTick()
-  // register draggables for each task node (wrapper with data-id)
   orderedTasks.value.forEach(task => {
     const el = parentRef.value?.querySelector(`[data-id="${task.id}"]`)
     if (el) dnd.registerDraggable({ id: String(task.id), el, data: { taskId: task.id } })

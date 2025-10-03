@@ -9,8 +9,7 @@ const props = defineProps({
 
 const dnd = inject('dnd')
 if (!dnd) {
-  // fail silently in dev; you can throw if you prefer hard requirement
-  // throw new Error('TaskCard requires a provided dnd instance')
+  throw new Error('TaskCard requires a provided dnd instance')
 }
 
 const root = ref(null)
@@ -68,5 +67,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-article { will-change: transform; }
+article {
+  will-change: transform;
+}
 </style>
